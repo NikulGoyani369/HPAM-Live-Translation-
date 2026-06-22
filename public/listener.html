@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="HPAM Translation" />
+  <meta name="theme-color" content="#1a0a2e" />
+  <title>HPAM Live Translation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --deep:    #1a0a2e;
+      --purple:  #4B2D6E;
+      --gold:    #D4A017;
+      --gold-lt: #f0c040;
+      --cream:   #fdf6e3;
+      --muted:   #a897c0;
+      --green:   #2ecc71;
+      --red:     #e74c3c;
+      --radius:  16px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--deep);
+      color: var(--cream);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom);
+      min-height: 100dvh;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .event-label {
+      font-size: 11px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 6px;
+    }
+    .event-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--cream);
+      line-height: 1.25;
+    }
+    .event-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+    }
+
+    /* ── Language badge ── */
+    .lang-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(212,160,23,0.15);
+      border: 1px solid rgba(212,160,23,0.35);
+      border-radius: 40px;
+      padding: 8px 18px;
+      margin-bottom: 28px;
+      font-size: 13px;
+      color: var(--gold-lt);
+      font-weight: 500;
+    }
+    .lang-badge .arrow { font-size: 16px; }
+
+    /* ── Visualizer ── */
+    .visualizer-wrap {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 24px;
+    }
+    canvas#viz {
+      border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+    }
+    .headphone-icon {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 42px;
+      pointer-events: none;
+    }
+
+    /* ── Status ── */
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-right: 6px;
+      vertical-align: middle;
+      transition: background 0.3s;
+    }
+    .status-dot.live  { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s infinite; }
+    .status-dot.error { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .status-text strong { color: var(--cream); }
+
+    .duration {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--gold);
+      letter-spacing: 2px;
+      margin: 12px 0;
+    }
+
+    /* ── Button ── */
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 20px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--purple), #6b3fa0);
+      color: #fff;
+    }
+    .btn-danger {
+      background: rgba(231,76,60,0.15);
+      color: var(--red);
+      border: 1px solid rgba(231,76,60,0.3);
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Waiting state ── */
+    .waiting-msg {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 16px;
+      line-height: 1.5;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 28px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+      text-align: center;
+    }
+
+    /* ── Hidden ── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="event-label">Live Translation · Berlin 2026</div>
+    <div class="event-title">Hari Prabodham<br>Amrut Mahotsav</div>
+    <div class="event-sub">15 – 17 August 2026</div>
+  </div>
+
+  <div class="card">
+    <div class="lang-badge">
+      <span>🇮🇳 Gujarati</span>
+      <span class="arrow">→</span>
+      <span>🇬🇧 English</span>
+    </div>
+
+    <div class="visualizer-wrap">
+      <canvas id="viz" width="120" height="120"></canvas>
+      <div class="headphone-icon">🎧</div>
+    </div>
+
+    <div class="duration" id="duration">00:00</div>
+
+    <div class="status-text">
+      <span class="status-dot" id="dot"></span>
+      <span id="statusMsg">Ready to connect</span>
+    </div>
+
+    <p class="waiting-msg hidden" id="waitingMsg">
+      The translator is not yet online.<br>Please keep this page open — audio will start automatically.
+    </p>
+
+    <button class="btn btn-primary" id="connectBtn">🎧 Start Listening</button>
+    <button class="btn btn-danger hidden" id="stopBtn">Stop</button>
+  </div>
+
+  <div class="footer">HPAM 2026 · WebRTC Real-time · hariprabodham.de</div>
+
+  <!-- Socket.io from CDN -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // ── Config ──────────────────────────────────────────────────────
+    const ROOM_ID = 'hpam-english'; // one room per language
+    const SERVER_URL = window.location.origin; // same host as server
+
+    // ── State ───────────────────────────────────────────────────────
+    let socket, peerConn, audioCtx, analyser, animFrame;
+    let startTime = null, timerInterval = null;
+    let connected = false;
+
+    // ── DOM ─────────────────────────────────────────────────────────
+    const connectBtn  = document.getElementById('connectBtn');
+    const stopBtn     = document.getElementById('stopBtn');
+    const dot         = document.getElementById('dot');
+    const statusMsg   = document.getElementById('statusMsg');
+    const durationEl  = document.getElementById('duration');
+    const waitingMsg  = document.getElementById('waitingMsg');
+    const canvas      = document.getElementById('viz');
+    const ctx2d       = canvas.getContext('2d');
+
+    // ── UI helpers ──────────────────────────────────────────────────
+    function setStatus(text, state = '') {
+      statusMsg.textContent = text;
+      dot.className = 'status-dot' + (state ? ' ' + state : '');
+    }
+
+    function startTimer() {
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - startTime) / 1000);
+        const m = Math.floor(s / 60).toString().padStart(2,'0');
+        const sec = (s % 60).toString().padStart(2,'0');
+        durationEl.textContent = `${m}:${sec}`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      durationEl.textContent = '00:00';
+    }
+
+    // ── Visualizer ──────────────────────────────────────────────────
+    function startVisualizer(stream) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      drawViz();
+    }
+
+    function drawViz() {
+      animFrame = requestAnimationFrame(drawViz);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      const r = 48 + avg * 0.12;
+      const cx = 60, cy = 60;
+      ctx2d.clearRect(0,0,120,120);
+      // glow ring
+      const grad = ctx2d.createRadialGradient(cx,cy,r-4,cx,cy,r+6);
+      grad.addColorStop(0, `rgba(212,160,23,${0.15 + avg/800})`);
+      grad.addColorStop(1, 'rgba(212,160,23,0)');
+      ctx2d.beginPath();
+      ctx2d.arc(cx,cy,r+6,0,Math.PI*2);
+      ctx2d.fillStyle = grad;
+      ctx2d.fill();
+      // ring
+      ctx2d.beginPath();
+      ctx2d.arc(cx,cy,r,0,Math.PI*2);
+      ctx2d.strokeStyle = `rgba(212,160,23,${0.3 + avg/400})`;
+      ctx2d.lineWidth = 2.5;
+      ctx2d.stroke();
+    }
+
+    function stopVisualizer() {
+      cancelAnimationFrame(animFrame);
+      if (audioCtx) audioCtx.close();
+      ctx2d.clearRect(0,0,120,120);
+    }
+
+    // ── WebRTC ──────────────────────────────────────────────────────
+    function createPeerConn() {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) socket.emit('signal:ice', { to: 'translator', candidate });
+      };
+
+      pc.ontrack = (e) => {
+        connected = true;
+        const audio = new Audio();
+        audio.srcObject = e.streams[0];
+        audio.play().catch(()=>{});
+        startVisualizer(e.streams[0]);
+        setStatus('Live — English translation', 'live');
+        startTimer();
+        waitingMsg.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        connectBtn.classList.add('hidden');
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (['disconnected','failed','closed'].includes(pc.connectionState)) {
+          setStatus('Connection lost — tap to retry');
+          cleanup();
+          connectBtn.classList.remove('hidden');
+          connectBtn.textContent = '🔄 Reconnect';
+          stopBtn.classList.add('hidden');
+        }
+      };
+
+      return pc;
+    }
+
+    // ── Connect ──────────────────────────────────────────────────────
+    function connect() {
+      connectBtn.disabled = true;
+      setStatus('Connecting…');
+
+      socket = io(SERVER_URL);
+
+      socket.on('connect', () => {
+        socket.emit('listener:join', { roomId: ROOM_ID });
+      });
+
+      socket.on('listener:joined', ({ translatorOnline }) => {
+        peerConn = createPeerConn();
+        if (!translatorOnline) {
+          setStatus('Waiting for translator…');
+          waitingMsg.classList.remove('hidden');
+          connectBtn.disabled = false;
+        } else {
+          setStatus('Translator found — connecting…');
+        }
+      });
+
+      socket.on('translator:online', () => {
+        waitingMsg.classList.add('hidden');
+        setStatus('Translator online — connecting…');
+        if (!peerConn) peerConn = createPeerConn();
+      });
+
+      socket.on('translator:offline', () => {
+        setStatus('Translator went offline');
+        stopVisualizer();
+        stopTimer();
+        connected = false;
+        waitingMsg.classList.remove('hidden');
+      });
+
+      // Receive offer from translator
+      socket.on('signal:offer', async ({ from, offer }) => {
+        if (!peerConn) peerConn = createPeerConn();
+        await peerConn.setRemoteDescription(offer);
+        const answer = await peerConn.createAnswer();
+        await peerConn.setLocalDescription(answer);
+        socket.emit('signal:answer', { to: from, answer });
+      });
+
+      socket.on('signal:ice', ({ candidate }) => {
+        peerConn?.addIceCandidate(candidate).catch(()=>{});
+      });
+
+      socket.on('error', ({ message }) => {
+        setStatus('Error: ' + message, 'error');
+        connectBtn.disabled = false;
+      });
+
+      socket.on('disconnect', () => {
+        if (connected) setStatus('Disconnected', 'error');
+      });
+    }
+
+    function cleanup() {
+      peerConn?.close();
+      peerConn = null;
+      socket?.disconnect();
+      socket = null;
+      stopVisualizer();
+      stopTimer();
+      connected = false;
+      connectBtn.disabled = false;
+    }
+
+    // ── Buttons ──────────────────────────────────────────────────────
+    connectBtn.addEventListener('click', connect);
+    stopBtn.addEventListener('click', () => {
+      cleanup();
+      setStatus('Stopped');
+      stopBtn.classList.add('hidden');
+      connectBtn.classList.remove('hidden');
+      connectBtn.textContent = '🎧 Start Listening';
+      waitingMsg.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>

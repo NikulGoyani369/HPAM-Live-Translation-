@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a0a2e" />
+  <title>HPAM Translator Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --deep:    #1a0a2e;
+      --purple:  #4B2D6E;
+      --gold:    #D4A017;
+      --gold-lt: #f0c040;
+      --cream:   #fdf6e3;
+      --muted:   #a897c0;
+      --green:   #2ecc71;
+      --red:     #e74c3c;
+      --radius:  16px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--deep);
+      color: var(--cream);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      min-height: 100dvh;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(212,160,23,0.2);
+      border: 1px solid rgba(212,160,23,0.4);
+      color: var(--gold);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--cream);
+      line-height: 1.3;
+    }
+    .sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    /* Card */
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    /* Mic visualizer */
+    .viz-wrap {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 4px;
+      height: 56px;
+      margin-bottom: 24px;
+    }
+    .bar {
+      width: 6px;
+      border-radius: 3px;
+      background: var(--gold);
+      opacity: 0.25;
+      transition: height 0.05s;
+      min-height: 4px;
+    }
+    .bar.active { opacity: 1; }
+
+    /* Stats row */
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--gold);
+    }
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    /* Status */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.live  { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s infinite; }
+    .dot.error { background: var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* Mic select */
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: .5px; }
+    select {
+      width: 100%;
+      padding: 11px 14px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      color: var(--cream);
+      font-size: 14px;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    /* Buttons */
+    .btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--purple), #6b3fa0);
+      color: #fff;
+    }
+    .btn-danger {
+      background: rgba(231,76,60,0.15);
+      color: var(--red);
+      border: 1px solid rgba(231,76,60,0.3);
+      margin-top: 10px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .hidden { display: none !important; }
+
+    /* Share link */
+    .share-box {
+      margin-top: 20px;
+      background: rgba(212,160,23,0.08);
+      border: 1px solid rgba(212,160,23,0.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .share-label { font-size: 11px; color: var(--gold); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+    .share-url {
+      font-size: 13px;
+      color: var(--cream);
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+    .copy-btn {
+      background: rgba(212,160,23,0.2);
+      border: 1px solid rgba(212,160,23,0.35);
+      color: var(--gold-lt);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .copy-btn:hover { background: rgba(212,160,23,0.3); }
+
+    .footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.2);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="badge">Translator Dashboard</div>
+    <h1>Hari Prabodham<br>Amrut Mahotsav 2026</h1>
+    <div class="sub">Gujarati → English · Berlin, Germany</div>
+  </div>
+
+  <div class="card">
+    <!-- Mic visualizer bars -->
+    <div class="viz-wrap" id="vizWrap">
+      <div class="bar" style="height:8px"></div>
+      <div class="bar" style="height:14px"></div>
+      <div class="bar" style="height:20px"></div>
+      <div class="bar" style="height:30px"></div>
+      <div class="bar" style="height:40px"></div>
+      <div class="bar" style="height:52px"></div>
+      <div class="bar" style="height:40px"></div>
+      <div class="bar" style="height:30px"></div>
+      <div class="bar" style="height:20px"></div>
+      <div class="bar" style="height:14px"></div>
+      <div class="bar" style="height:8px"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="listenerCount">0</div>
+        <div class="stat-label">Listeners</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="durationEl">00:00</div>
+        <div class="stat-label">Duration</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="peersEl">0</div>
+        <div class="stat-label">Connected</div>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-row">
+      <div class="dot" id="dot"></div>
+      <span id="statusMsg">Select microphone and go live</span>
+    </div>
+
+    <!-- Mic selector -->
+    <div class="field" id="micField">
+      <label>🎙 Microphone</label>
+      <select id="micSelect"><option value="">Loading devices…</option></select>
+    </div>
+
+    <!-- Go live / stop -->
+    <button class="btn btn-primary" id="goLiveBtn">🎙 Go Live</button>
+    <button class="btn btn-danger hidden" id="stopBtn">⏹ End Broadcast</button>
+
+    <!-- Share box (shown when live) -->
+    <div class="share-box hidden" id="shareBox">
+      <div class="share-label">🔗 Listener Link</div>
+      <div class="share-url" id="shareUrl"></div>
+      <button class="copy-btn" id="copyBtn">Copy Link</button>
+    </div>
+  </div>
+
+  <div class="footer">HPAM 2026 · WebRTC Real-time · hariprabodham.de</div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    // ── Config ──────────────────────────────────────────────────────
+    const ROOM_ID = 'hpam-english';
+    const SERVER_URL = window.location.origin;
+
+    // ── State ───────────────────────────────────────────────────────
+    let socket, localStream, audioCtx, analyser, animFrame;
+    let peers = {}; // listenerId → RTCPeerConnection
+    let listenerCount = 0, connectedPeers = 0;
+    let startTime = null, timerInterval = null;
+    let isLive = false;
+
+    // ── DOM ─────────────────────────────────────────────────────────
+    const goLiveBtn      = document.getElementById('goLiveBtn');
+    const stopBtn        = document.getElementById('stopBtn');
+    const micSelect      = document.getElementById('micSelect');
+    const micField       = document.getElementById('micField');
+    const dot            = document.getElementById('dot');
+    const statusMsg      = document.getElementById('statusMsg');
+    const listenerCountEl = document.getElementById('listenerCount');
+    const durationEl     = document.getElementById('durationEl');
+    const peersEl        = document.getElementById('peersEl');
+    const shareBox       = document.getElementById('shareBox');
+    const shareUrl       = document.getElementById('shareUrl');
+    const copyBtn        = document.getElementById('copyBtn');
+    const bars           = document.querySelectorAll('.bar');
+
+    // ── Populate microphones ─────────────────────────────────────────
+    async function loadMics() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        micSelect.innerHTML = mics.map((m, i) =>
+          `<option value="${m.deviceId}">${m.label || 'Microphone ' + (i+1)}</option>`
+        ).join('');
+      } catch {
+        micSelect.innerHTML = '<option value="">Default microphone</option>';
+      }
+    }
+    loadMics();
+
+    // ── Timer ────────────────────────────────────────────────────────
+    function startTimer() {
+      startTime = Date.now();
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - startTime) / 1000);
+        const m = Math.floor(s/60).toString().padStart(2,'0');
+        durationEl.textContent = `${m}:${(s%60).toString().padStart(2,'0')}`;
+      }, 1000);
+    }
+    function stopTimer() {
+      clearInterval(timerInterval);
+      durationEl.textContent = '00:00';
+    }
+
+    // ── Mic visualizer ───────────────────────────────────────────────
+    function startViz(stream) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 32;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      animViz();
+    }
+    function animViz() {
+      animFrame = requestAnimationFrame(animViz);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      bars.forEach((bar, i) => {
+        const idx = Math.floor(i * data.length / bars.length);
+        const h = 4 + (data[idx] / 255) * 52;
+        bar.style.height = h + 'px';
+        bar.classList.toggle('active', data[idx] > 10);
+      });
+    }
+    function stopViz() {
+      cancelAnimationFrame(animFrame);
+      if (audioCtx) audioCtx.close();
+      bars.forEach(b => { b.style.height = '4px'; b.classList.remove('active'); });
+    }
+
+    // ── WebRTC peer for each listener ────────────────────────────────
+    function createPeerForListener(listenerId) {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      // Add local audio tracks
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) socket.emit('signal:ice', { to: listenerId, candidate });
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (['connected','completed'].includes(pc.connectionState)) {
+          connectedPeers++;
+        } else if (['disconnected','failed','closed'].includes(pc.connectionState)) {
+          connectedPeers = Math.max(0, connectedPeers - 1);
+        }
+        peersEl.textContent = connectedPeers;
+      };
+
+      peers[listenerId] = pc;
+      return pc;
+    }
+
+    // ── Go Live ──────────────────────────────────────────────────────
+    async function goLive() {
+      goLiveBtn.disabled = true;
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: micSelect.value || undefined, echoCancellation: true, noiseSuppression: true }
+        });
+      } catch (err) {
+        statusMsg.textContent = 'Microphone access denied';
+        dot.className = 'dot error';
+        goLiveBtn.disabled = false;
+        return;
+      }
+
+      startViz(localStream);
+      isLive = true;
+
+      socket = io(SERVER_URL);
+
+      socket.on('connect', () => {
+        socket.emit('translator:join', { roomId: ROOM_ID });
+      });
+
+      socket.on('translator:joined', ({ listenerCount: lc }) => {
+        listenerCount = lc;
+        listenerCountEl.textContent = listenerCount;
+        dot.className = 'dot live';
+        statusMsg.textContent = 'You are live';
+        startTimer();
+        micField.classList.add('hidden');
+        goLiveBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+
+        // Share link
+        const url = `${window.location.origin}/listener.html`;
+        shareUrl.textContent = url;
+        shareBox.classList.remove('hidden');
+      });
+
+      socket.on('listener:count', ({ count }) => {
+        listenerCount = count;
+        listenerCountEl.textContent = count;
+      });
+
+      // New listener arrived — translator creates offer
+      socket.on('listener:new', async ({ listenerId }) => {
+        const pc = createPeerForListener(listenerId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('signal:offer', { to: listenerId, offer });
+      });
+
+      socket.on('signal:answer', async ({ from, answer }) => {
+        await peers[from]?.setRemoteDescription(answer);
+      });
+
+      socket.on('signal:ice', ({ from, candidate }) => {
+        peers[from]?.addIceCandidate(candidate).catch(()=>{});
+      });
+
+      socket.on('error', ({ message }) => {
+        statusMsg.textContent = message;
+        dot.className = 'dot error';
+      });
+    }
+
+    // ── Stop broadcast ───────────────────────────────────────────────
+    function stopBroadcast() {
+      isLive = false;
+      localStream?.getTracks().forEach(t => t.stop());
+      Object.values(peers).forEach(pc => pc.close());
+      peers = {};
+      socket?.disconnect();
+      stopViz();
+      stopTimer();
+      connectedPeers = 0;
+      listenerCount = 0;
+      listenerCountEl.textContent = '0';
+      peersEl.textContent = '0';
+      dot.className = 'dot';
+      statusMsg.textContent = 'Broadcast ended';
+      stopBtn.classList.add('hidden');
+      shareBox.classList.add('hidden');
+      micField.classList.remove('hidden');
+      goLiveBtn.classList.remove('hidden');
+      goLiveBtn.disabled = false;
+    }
+
+    goLiveBtn.addEventListener('click', goLive);
+    stopBtn.addEventListener('click', stopBroadcast);
+
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(shareUrl.textContent).then(() => {
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(() => copyBtn.textContent = 'Copy Link', 2000);
+      });
+    });
+  </script>
+</body>
+</html>
