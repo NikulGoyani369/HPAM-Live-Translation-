@@ -238,6 +238,11 @@
     let socket, peerConn, audioCtx, analyser, animFrame;
     let startTime = null, timerInterval = null;
     let connected = false;
+    let translatorId = null;
+    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+    // Fetch ICE config (includes TURN if configured server-side)
+    fetch('/api/ice-servers').then(r => r.json()).then(d => { iceServers = d.iceServers; }).catch(() => {});
 
     // ── DOM ─────────────────────────────────────────────────────────
     const connectBtn  = document.getElementById('connectBtn');
@@ -311,12 +316,10 @@
 
     // ── WebRTC ──────────────────────────────────────────────────────
     function createPeerConn() {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
+      const pc = new RTCPeerConnection({ iceServers });
 
       pc.onicecandidate = ({ candidate }) => {
-        if (candidate) socket.emit('signal:ice', { to: 'translator', candidate });
+        if (candidate && translatorId) socket.emit('signal:ice', { to: translatorId, candidate });
       };
 
       pc.ontrack = (e) => {
@@ -383,6 +386,7 @@
 
       // Receive offer from translator
       socket.on('signal:offer', async ({ from, offer }) => {
+        translatorId = from;
         if (!peerConn) peerConn = createPeerConn();
         await peerConn.setRemoteDescription(offer);
         const answer = await peerConn.createAnswer();
@@ -409,6 +413,7 @@
       peerConn = null;
       socket?.disconnect();
       socket = null;
+      translatorId = null;
       stopVisualizer();
       stopTimer();
       connected = false;

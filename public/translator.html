@@ -290,6 +290,10 @@
     let listenerCount = 0, connectedPeers = 0;
     let startTime = null, timerInterval = null;
     let isLive = false;
+    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+    // Fetch ICE config (includes TURN if configured server-side)
+    fetch('/api/ice-servers').then(r => r.json()).then(d => { iceServers = d.iceServers; }).catch(() => {});
 
     // ── DOM ─────────────────────────────────────────────────────────
     const goLiveBtn      = document.getElementById('goLiveBtn');
@@ -362,9 +366,7 @@
 
     // ── WebRTC peer for each listener ────────────────────────────────
     function createPeerForListener(listenerId) {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
+      const pc = new RTCPeerConnection({ iceServers });
 
       // Add local audio tracks
       localStream.getTracks().forEach(t => pc.addTrack(t, localStream));

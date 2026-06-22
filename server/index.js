@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -11,6 +12,19 @@ const io = new Server(server, {
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, '../public')));
+
+// ICE server config — TURN credentials stay server-side
+app.get('/api/ice-servers', (req, res) => {
+  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    iceServers.push({
+      urls: process.env.TURN_URL,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+  res.json({ iceServers });
+});
 
 // Track rooms: { roomId: { translator: socketId | null, listeners: Set<socketId> } }
 const rooms = {};
