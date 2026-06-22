@@ -4,6 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#1a0a2e"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon.svg"/>
   <title>HPAM Live Translation</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,6 +53,25 @@
     .card-arrow { float: right; color: var(--gold); font-size: 18px; margin-top: -22px; }
 
     .footer { margin-top: 40px; font-size: 11px; color: rgba(255,255,255,0.2); text-align: center; }
+
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px; font-weight: 600; letter-spacing: 1px;
+      border-radius: 20px; padding: 5px 14px; margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--muted); background: rgba(255,255,255,0.04);
+      transition: all 0.4s;
+    }
+    .live-badge.live {
+      color: #2ecc71; background: rgba(46,204,113,0.1);
+      border-color: rgba(46,204,113,0.3);
+    }
+    .live-badge .bdot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+    .live-badge.live .bdot { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
   </style>
 </head>
 <body>
@@ -58,6 +79,11 @@
   <div class="event-label">Live Translation · Berlin 2026</div>
   <h1>Hari Prabodham<br>Amrut Mahotsav</h1>
   <div class="dates">15 – 17 August 2026 · Berlin, Germany</div>
+
+  <div class="live-badge" id="liveBadge">
+    <span class="bdot"></span>
+    <span id="liveText">Checking status…</span>
+  </div>
 
   <div class="lang-pill">
     <span>🇮🇳 Gujarati</span>
@@ -81,5 +107,28 @@
   </div>
 
   <div class="footer">HPAM 2026 · WebRTC · hariprabodham.de</div>
+
+  <script>
+    const badge = document.getElementById('liveBadge');
+    const liveText = document.getElementById('liveText');
+
+    function checkStatus() {
+      fetch('/api/status/hpam-english')
+        .then(r => r.json())
+        .then(({ live, listeners }) => {
+          if (live) {
+            badge.classList.add('live');
+            liveText.textContent = `Translator is LIVE · ${listeners} listening`;
+          } else {
+            badge.classList.remove('live');
+            liveText.textContent = 'Translation not started yet';
+          }
+        })
+        .catch(() => { liveText.textContent = 'Status unavailable'; });
+    }
+
+    checkStatus();
+    setInterval(checkStatus, 5000);
+  </script>
 </body>
 </html>

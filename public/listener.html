@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="HPAM Translation" />
   <meta name="theme-color" content="#1a0a2e" />
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon.svg"/>
   <title>HPAM Live Translation</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -186,6 +188,29 @@
       text-align: center;
     }
 
+    /* ── Volume slider ── */
+    .volume-wrap {
+      margin-bottom: 16px;
+    }
+    .volume-label {
+      font-size: 12px; color: var(--muted); margin-bottom: 6px;
+      display: flex; justify-content: space-between;
+    }
+    .volume-slider {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--gold) 0%, var(--gold) 100%);
+    }
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px;
+      border-radius: 50%; background: var(--gold-lt);
+      box-shadow: 0 0 4px rgba(0,0,0,0.4); cursor: pointer;
+    }
+    .volume-slider::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--gold-lt); border: none; cursor: pointer;
+    }
+
     /* ── Earphone notice ── */
     .earphone-notice {
       font-size: 12px;
@@ -234,6 +259,14 @@
       The translator is not yet online.<br>Please keep this page open — audio will start automatically.
     </p>
 
+    <div class="volume-wrap hidden" id="volumeWrap">
+      <div class="volume-label">
+        <span>🔊 Volume</span>
+        <span id="volumePct">100%</span>
+      </div>
+      <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1"/>
+    </div>
+
     <div class="earphone-notice">
       🎧 Please use <strong>earphones</strong> if you are near the translator to avoid echo.
     </div>
@@ -252,7 +285,7 @@
     const SERVER_URL = window.location.origin; // same host as server
 
     // ── State ───────────────────────────────────────────────────────
-    let socket, peerConn, audioCtx, analyser, animFrame;
+    let socket, peerConn, audioCtx, analyser, animFrame, audioEl;
     let startTime = null, timerInterval = null;
     let connected = false;
     let translatorId = null;
@@ -262,14 +295,24 @@
     fetch('/api/ice-servers').then(r => r.json()).then(d => { iceServers = d.iceServers; }).catch(() => {});
 
     // ── DOM ─────────────────────────────────────────────────────────
-    const connectBtn  = document.getElementById('connectBtn');
-    const stopBtn     = document.getElementById('stopBtn');
-    const dot         = document.getElementById('dot');
-    const statusMsg   = document.getElementById('statusMsg');
-    const durationEl  = document.getElementById('duration');
-    const waitingMsg  = document.getElementById('waitingMsg');
-    const canvas      = document.getElementById('viz');
-    const ctx2d       = canvas.getContext('2d');
+    const connectBtn   = document.getElementById('connectBtn');
+    const stopBtn      = document.getElementById('stopBtn');
+    const dot          = document.getElementById('dot');
+    const statusMsg    = document.getElementById('statusMsg');
+    const durationEl   = document.getElementById('duration');
+    const waitingMsg   = document.getElementById('waitingMsg');
+    const canvas       = document.getElementById('viz');
+    const ctx2d        = canvas.getContext('2d');
+    const volumeWrap   = document.getElementById('volumeWrap');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumePct    = document.getElementById('volumePct');
+
+    volumeSlider.addEventListener('input', () => {
+      if (audioEl) audioEl.volume = volumeSlider.value;
+      volumePct.textContent = Math.round(volumeSlider.value * 100) + '%';
+      const pct = volumeSlider.value * 100;
+      volumeSlider.style.background = `linear-gradient(to right, var(--gold) ${pct}%, rgba(255,255,255,0.1) ${pct}%)`;
+    });
 
     // ── UI helpers ──────────────────────────────────────────────────
     function setStatus(text, state = '') {
@@ -341,13 +384,15 @@
 
       pc.ontrack = (e) => {
         connected = true;
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play().catch(()=>{});
+        audioEl = new Audio();
+        audioEl.srcObject = e.streams[0];
+        audioEl.volume = volumeSlider.value;
+        audioEl.play().catch(()=>{});
         startVisualizer(e.streams[0]);
         setStatus('Live — English translation', 'live');
         startTimer();
         waitingMsg.classList.add('hidden');
+        volumeWrap.classList.remove('hidden');
         stopBtn.classList.remove('hidden');
         connectBtn.classList.add('hidden');
       };
@@ -431,9 +476,11 @@
       socket?.disconnect();
       socket = null;
       translatorId = null;
+      audioEl = null;
       stopVisualizer();
       stopTimer();
       connected = false;
+      volumeWrap.classList.add('hidden');
       connectBtn.disabled = false;
     }
 
