@@ -14,14 +14,12 @@ const io = new Server(server, {
 app.use(express.static(path.join(__dirname, '../public')));
 
 // ICE server config — TURN credentials stay server-side
+// TURN_URLS accepts comma-separated list e.g. "turn:x.metered.ca:80,turn:x.metered.ca:443,turns:x.metered.ca:443?transport=tcp"
 app.get('/api/ice-servers', (req, res) => {
   const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
-    iceServers.push({
-      urls: process.env.TURN_URL,
-      username: process.env.TURN_USERNAME,
-      credential: process.env.TURN_CREDENTIAL,
-    });
+  if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    const urls = process.env.TURN_URLS.split(',').map(u => u.trim());
+    iceServers.push({ urls, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
   }
   res.json({ iceServers });
 });
