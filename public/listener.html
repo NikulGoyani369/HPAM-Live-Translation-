@@ -186,6 +186,19 @@
       text-align: center;
     }
 
+    /* ── Earphone notice ── */
+    .earphone-notice {
+      font-size: 12px;
+      color: var(--gold-lt);
+      background: rgba(212,160,23,0.08);
+      border: 1px solid rgba(212,160,23,0.2);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+      text-align: left;
+    }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -220,6 +233,10 @@
     <p class="waiting-msg hidden" id="waitingMsg">
       The translator is not yet online.<br>Please keep this page open — audio will start automatically.
     </p>
+
+    <div class="earphone-notice">
+      🎧 Please use <strong>earphones</strong> if you are near the translator to avoid echo.
+    </div>
 
     <button class="btn btn-primary" id="connectBtn">🎧 Start Listening</button>
     <button class="btn btn-danger hidden" id="stopBtn">Stop</button>
