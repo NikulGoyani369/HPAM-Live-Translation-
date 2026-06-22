@@ -24,6 +24,12 @@ app.get('/api/ice-servers', (req, res) => {
   res.json({ iceServers });
 });
 
+// Live status endpoint for landing page
+app.get('/api/status/:roomId', (req, res) => {
+  const room = rooms[req.params.roomId];
+  res.json({ live: !!(room && room.translator), listeners: room ? room.listeners.size : 0 });
+});
+
 // Track rooms: { roomId: { translator: socketId | null, listeners: Set<socketId> } }
 const rooms = {};
 
