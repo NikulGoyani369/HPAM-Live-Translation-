@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#1a0a2e"/>
+  <!-- Headphone arc -->
+  <path d="M256 130 C163 130 88 205 88 298 L88 350 C88 372 106 390 128 390 L168 390 C190 390 208 372 208 350 L208 298 C208 247 228 206 256 206 C284 206 304 247 304 298 L304 350 C304 372 322 390 344 390 L384 390 C406 390 424 372 424 350 L424 298 C424 205 349 130 256 130Z" fill="none" stroke="#D4A017" stroke-width="22" stroke-linecap="round"/>
+  <rect x="92" y="290" width="112" height="100" rx="20" fill="#D4A017"/>
+  <rect x="308" y="290" width="112" height="100" rx="20" fill="#D4A017"/>
+</svg>

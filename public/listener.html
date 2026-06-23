@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="HPAM Translation" />
   <meta name="theme-color" content="#1a0a2e" />
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon.svg"/>
   <title>HPAM Live Translation</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -186,6 +188,29 @@
       text-align: center;
     }
 
+    /* ── Volume slider ── */
+    .volume-wrap {
+      margin-bottom: 16px;
+    }
+    .volume-label {
+      font-size: 12px; color: var(--muted); margin-bottom: 6px;
+      display: flex; justify-content: space-between;
+    }
+    .volume-slider {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--gold) 0%, var(--gold) 100%);
+    }
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px;
+      border-radius: 50%; background: var(--gold-lt);
+      box-shadow: 0 0 4px rgba(0,0,0,0.4); cursor: pointer;
+    }
+    .volume-slider::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--gold-lt); border: none; cursor: pointer;
+    }
+
     /* ── Earphone notice ── */
     .earphone-notice {
       font-size: 12px;
@@ -234,6 +259,14 @@
       The translator is not yet online.<br>Please keep this page open — audio will start automatically.
     </p>
 
+    <div class="volume-wrap hidden" id="volumeWrap">
+      <div class="volume-label">
+        <span>🔊 Volume</span>
+        <span id="volumePct">100%</span>
+      </div>
+      <input type="range" class="volume-slider" id="volumeSlider" min="0" max="1" step="0.05" value="1"/>
+    </div>
+
     <div class="earphone-notice">
       🎧 Please use <strong>earphones</strong> if you are near the translator to avoid echo.
     </div>
@@ -244,209 +277,7 @@
 
   <div class="footer">HPAM 2026 · WebRTC Real-time · hariprabodham.de</div>
 
-  <!-- Socket.io from CDN -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script>
-    // ── Config ──────────────────────────────────────────────────────
-    const ROOM_ID = 'hpam-english'; // one room per language
-    const SERVER_URL = window.location.origin; // same host as server
-
-    // ── State ───────────────────────────────────────────────────────
-    let socket, peerConn, audioCtx, analyser, animFrame;
-    let startTime = null, timerInterval = null;
-    let connected = false;
-    let translatorId = null;
-    let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-
-    // Fetch ICE config (includes TURN if configured server-side)
-    fetch('/api/ice-servers').then(r => r.json()).then(d => { iceServers = d.iceServers; }).catch(() => {});
-
-    // ── DOM ─────────────────────────────────────────────────────────
-    const connectBtn  = document.getElementById('connectBtn');
-    const stopBtn     = document.getElementById('stopBtn');
-    const dot         = document.getElementById('dot');
-    const statusMsg   = document.getElementById('statusMsg');
-    const durationEl  = document.getElementById('duration');
-    const waitingMsg  = document.getElementById('waitingMsg');
-    const canvas      = document.getElementById('viz');
-    const ctx2d       = canvas.getContext('2d');
-
-    // ── UI helpers ──────────────────────────────────────────────────
-    function setStatus(text, state = '') {
-      statusMsg.textContent = text;
-      dot.className = 'status-dot' + (state ? ' ' + state : '');
-    }
-
-    function startTimer() {
-      startTime = Date.now();
-      timerInterval = setInterval(() => {
-        const s = Math.floor((Date.now() - startTime) / 1000);
-        const m = Math.floor(s / 60).toString().padStart(2,'0');
-        const sec = (s % 60).toString().padStart(2,'0');
-        durationEl.textContent = `${m}:${sec}`;
-      }, 1000);
-    }
-
-    function stopTimer() {
-      clearInterval(timerInterval);
-      durationEl.textContent = '00:00';
-    }
-
-    // ── Visualizer ──────────────────────────────────────────────────
-    function startVisualizer(stream) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      audioCtx.createMediaStreamSource(stream).connect(analyser);
-      drawViz();
-    }
-
-    function drawViz() {
-      animFrame = requestAnimationFrame(drawViz);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a,b)=>a+b,0)/data.length;
-      const r = 48 + avg * 0.12;
-      const cx = 60, cy = 60;
-      ctx2d.clearRect(0,0,120,120);
-      // glow ring
-      const grad = ctx2d.createRadialGradient(cx,cy,r-4,cx,cy,r+6);
-      grad.addColorStop(0, `rgba(212,160,23,${0.15 + avg/800})`);
-      grad.addColorStop(1, 'rgba(212,160,23,0)');
-      ctx2d.beginPath();
-      ctx2d.arc(cx,cy,r+6,0,Math.PI*2);
-      ctx2d.fillStyle = grad;
-      ctx2d.fill();
-      // ring
-      ctx2d.beginPath();
-      ctx2d.arc(cx,cy,r,0,Math.PI*2);
-      ctx2d.strokeStyle = `rgba(212,160,23,${0.3 + avg/400})`;
-      ctx2d.lineWidth = 2.5;
-      ctx2d.stroke();
-    }
-
-    function stopVisualizer() {
-      cancelAnimationFrame(animFrame);
-      if (audioCtx) audioCtx.close();
-      ctx2d.clearRect(0,0,120,120);
-    }
-
-    // ── WebRTC ──────────────────────────────────────────────────────
-    function createPeerConn() {
-      const pc = new RTCPeerConnection({ iceServers });
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (candidate && translatorId) socket.emit('signal:ice', { to: translatorId, candidate });
-      };
-
-      pc.ontrack = (e) => {
-        connected = true;
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.play().catch(()=>{});
-        startVisualizer(e.streams[0]);
-        setStatus('Live — English translation', 'live');
-        startTimer();
-        waitingMsg.classList.add('hidden');
-        stopBtn.classList.remove('hidden');
-        connectBtn.classList.add('hidden');
-      };
-
-      pc.onconnectionstatechange = () => {
-        if (['disconnected','failed','closed'].includes(pc.connectionState)) {
-          setStatus('Connection lost — tap to retry');
-          cleanup();
-          connectBtn.classList.remove('hidden');
-          connectBtn.textContent = '🔄 Reconnect';
-          stopBtn.classList.add('hidden');
-        }
-      };
-
-      return pc;
-    }
-
-    // ── Connect ──────────────────────────────────────────────────────
-    function connect() {
-      connectBtn.disabled = true;
-      setStatus('Connecting…');
-
-      socket = io(SERVER_URL);
-
-      socket.on('connect', () => {
-        socket.emit('listener:join', { roomId: ROOM_ID });
-      });
-
-      socket.on('listener:joined', ({ translatorOnline }) => {
-        peerConn = createPeerConn();
-        if (!translatorOnline) {
-          setStatus('Waiting for translator…');
-          waitingMsg.classList.remove('hidden');
-          connectBtn.disabled = false;
-        } else {
-          setStatus('Translator found — connecting…');
-        }
-      });
-
-      socket.on('translator:online', () => {
-        waitingMsg.classList.add('hidden');
-        setStatus('Translator online — connecting…');
-        if (!peerConn) peerConn = createPeerConn();
-      });
-
-      socket.on('translator:offline', () => {
-        setStatus('Translator went offline');
-        stopVisualizer();
-        stopTimer();
-        connected = false;
-        waitingMsg.classList.remove('hidden');
-      });
-
-      // Receive offer from translator
-      socket.on('signal:offer', async ({ from, offer }) => {
-        translatorId = from;
-        if (!peerConn) peerConn = createPeerConn();
-        await peerConn.setRemoteDescription(offer);
-        const answer = await peerConn.createAnswer();
-        await peerConn.setLocalDescription(answer);
-        socket.emit('signal:answer', { to: from, answer });
-      });
-
-      socket.on('signal:ice', ({ candidate }) => {
-        peerConn?.addIceCandidate(candidate).catch(()=>{});
-      });
-
-      socket.on('error', ({ message }) => {
-        setStatus('Error: ' + message, 'error');
-        connectBtn.disabled = false;
-      });
-
-      socket.on('disconnect', () => {
-        if (connected) setStatus('Disconnected', 'error');
-      });
-    }
-
-    function cleanup() {
-      peerConn?.close();
-      peerConn = null;
-      socket?.disconnect();
-      socket = null;
-      translatorId = null;
-      stopVisualizer();
-      stopTimer();
-      connected = false;
-      connectBtn.disabled = false;
-    }
-
-    // ── Buttons ──────────────────────────────────────────────────────
-    connectBtn.addEventListener('click', connect);
-    stopBtn.addEventListener('click', () => {
-      cleanup();
-      setStatus('Stopped');
-      stopBtn.classList.add('hidden');
-      connectBtn.classList.remove('hidden');
-      connectBtn.textContent = '🎧 Start Listening';
-      waitingMsg.classList.add('hidden');
-    });
-  </script>
+  <script src="/src/listener.js"></script>
 </body>
 </html>
