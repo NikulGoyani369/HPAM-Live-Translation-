@@ -11,14 +11,14 @@ function checkStatus(): void {
     .then(r => r.json() as Promise<StatusResponse>)
     .then(({ live, listeners }) => {
       if (live) {
-        badge!.classList.add('live');
-        liveText!.textContent = `Translator is LIVE · ${listeners} listening`;
+        badge.classList.add('live');
+        liveText.textContent = `Translator is LIVE · ${listeners} listening`;
       } else {
-        badge!.classList.remove('live');
-        liveText!.textContent = 'Translation not started yet';
+        badge.classList.remove('live');
+        liveText.textContent = 'Translation not started yet';
       }
     })
-    .catch(() => { liveText!.textContent = 'Status unavailable'; });
+    .catch(() => { liveText.textContent = 'Status unavailable'; });
 }
 
 checkStatus();
