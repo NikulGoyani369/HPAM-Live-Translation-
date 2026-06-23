@@ -40,9 +40,30 @@ app.get('/api/status/:roomId', (req, res) => {
   res.json({ live: !!(room && room.translator), listeners: room ? room.listeners.size : 0 });
 });
 
+const pinAttempts = new Map<string, { count: number; resetAt: number }>();
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = pinAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    pinAttempts.set(ip, { count: 1, resetAt: now + PIN_LOCKOUT_MS });
+    return true;
+  }
+  if (entry.count >= PIN_MAX_ATTEMPTS) return false;
+  entry.count++;
+  return true;
+}
+
 app.post('/api/verify-pin', (req, res) => {
   if (!process.env.TRANSLATOR_PIN) {
     res.status(503).json({ ok: false, reason: 'not_configured' });
+    return;
+  }
+  const ip = req.ip ?? 'unknown';
+  if (!checkRateLimit(ip)) {
+    res.status(429).json({ ok: false, reason: 'too_many_attempts' });
     return;
   }
   const { pin } = req.body as { pin?: string };

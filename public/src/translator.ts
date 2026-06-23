@@ -53,8 +53,6 @@ async function loadMics(): Promise<void> {
     micSelect.innerHTML = '<option value="">Default microphone</option>';
   }
 }
-loadMics();
-
 function startTimer(): void {
   startTime = Date.now();
   timerInterval = setInterval(() => {
@@ -244,8 +242,12 @@ async function verifyPin(): Promise<void> {
     if (data.ok) {
       pinScreen.classList.add('hidden');
       dashboard.classList.remove('hidden');
+      loadMics();
     } else if (data.reason === 'not_configured') {
       pinError.textContent = 'Translator access is not set up — contact the admin';
+      pinError.classList.remove('hidden');
+    } else if (data.reason === 'too_many_attempts') {
+      pinError.textContent = 'Too many attempts — try again in 15 minutes';
       pinError.classList.remove('hidden');
     } else {
       pinError.textContent = 'Incorrect PIN';
