@@ -22,6 +22,7 @@ const io = new Server(server, {
 });
 
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.json());
 
 const rooms: Record<string, Room> = {};
 
@@ -39,6 +40,19 @@ app.get('/api/status/:roomId', (req, res) => {
   res.json({ live: !!(room && room.translator), listeners: room ? room.listeners.size : 0 });
 });
 
+app.post('/api/verify-pin', (req, res) => {
+  if (!process.env.TRANSLATOR_PIN) {
+    res.status(503).json({ ok: false, reason: 'not_configured' });
+    return;
+  }
+  const { pin } = req.body as { pin?: string };
+  if (pin === process.env.TRANSLATOR_PIN) {
+    res.json({ ok: true });
+  } else {
+    res.status(401).json({ ok: false });
+  }
+});
+
 function getOrCreateRoom(roomId: string): Room {
   if (!rooms[roomId]) {
     rooms[roomId] = { translator: null, listeners: new Set() };
@@ -49,7 +63,16 @@ function getOrCreateRoom(roomId: string): Room {
 io.on('connection', (socket) => {
   console.log(`[+] Connected: ${socket.id}`);
 
-  socket.on('translator:join', ({ roomId }: { roomId: string }) => {
+  socket.on('translator:join', ({ roomId, pin }: { roomId: string; pin: string }) => {
+    if (!process.env.TRANSLATOR_PIN) {
+      socket.emit('error', { message: 'Translator access not configured.' });
+      return;
+    }
+    if (pin !== process.env.TRANSLATOR_PIN) {
+      socket.emit('error', { message: 'Incorrect PIN.' });
+      return;
+    }
+
     const room = getOrCreateRoom(roomId);
 
     if (room.translator && room.translator !== socket.id) {
