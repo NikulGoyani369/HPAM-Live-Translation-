@@ -1,8 +1,19 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+import 'dotenv/config';
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import path from 'path';
+
+interface Room {
+  translator: string | null;
+  listeners: Set<string>;
+}
+
+interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -10,13 +21,12 @@ const io = new Server(server, {
   cors: { origin: '*' }
 });
 
-// Serve static frontend files
 app.use(express.static(path.join(__dirname, '../public')));
 
-// ICE server config — TURN credentials stay server-side
-// TURN_URLS accepts comma-separated list e.g. "turn:x.metered.ca:80,turn:x.metered.ca:443,turns:x.metered.ca:443?transport=tcp"
-app.get('/api/ice-servers', (req, res) => {
-  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+const rooms: Record<string, Room> = {};
+
+app.get('/api/ice-servers', (_req, res) => {
+  const iceServers: IceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
   if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
     const urls = process.env.TURN_URLS.split(',').map(u => u.trim());
     iceServers.push({ urls, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
@@ -24,16 +34,12 @@ app.get('/api/ice-servers', (req, res) => {
   res.json({ iceServers });
 });
 
-// Live status endpoint for landing page
 app.get('/api/status/:roomId', (req, res) => {
   const room = rooms[req.params.roomId];
   res.json({ live: !!(room && room.translator), listeners: room ? room.listeners.size : 0 });
 });
 
-// Track rooms: { roomId: { translator: socketId | null, listeners: Set<socketId> } }
-const rooms = {};
-
-function getOrCreateRoom(roomId) {
+function getOrCreateRoom(roomId: string): Room {
   if (!rooms[roomId]) {
     rooms[roomId] = { translator: null, listeners: new Set() };
   }
@@ -43,8 +49,7 @@ function getOrCreateRoom(roomId) {
 io.on('connection', (socket) => {
   console.log(`[+] Connected: ${socket.id}`);
 
-  // ─── Translator joins ──────────────────────────────────────────────
-  socket.on('translator:join', ({ roomId }) => {
+  socket.on('translator:join', ({ roomId }: { roomId: string }) => {
     const room = getOrCreateRoom(roomId);
 
     if (room.translator && room.translator !== socket.id) {
@@ -59,13 +64,10 @@ io.on('connection', (socket) => {
 
     console.log(`[T] Translator joined room: ${roomId}`);
     socket.emit('translator:joined', { roomId, listenerCount: room.listeners.size });
-
-    // Notify all listeners that translator is live
     socket.to(roomId).emit('translator:online');
   });
 
-  // ─── Listener joins ────────────────────────────────────────────────
-  socket.on('listener:join', ({ roomId }) => {
+  socket.on('listener:join', ({ roomId }: { roomId: string }) => {
     const room = getOrCreateRoom(roomId);
 
     room.listeners.add(socket.id);
@@ -78,33 +80,29 @@ io.on('connection', (socket) => {
 
     socket.emit('listener:joined', { roomId, translatorOnline });
 
-    // Update listener count for translator
     if (room.translator) {
       io.to(room.translator).emit('listener:count', { count: room.listeners.size });
     }
 
-    // If translator is online, ask translator to initiate offer to this listener
     if (room.translator) {
       io.to(room.translator).emit('listener:new', { listenerId: socket.id });
     }
   });
 
-  // ─── WebRTC Signaling ──────────────────────────────────────────────
-  socket.on('signal:offer', ({ to, offer }) => {
+  socket.on('signal:offer', ({ to, offer }: { to: string; offer: unknown }) => {
     io.to(to).emit('signal:offer', { from: socket.id, offer });
   });
 
-  socket.on('signal:answer', ({ to, answer }) => {
+  socket.on('signal:answer', ({ to, answer }: { to: string; answer: unknown }) => {
     io.to(to).emit('signal:answer', { from: socket.id, answer });
   });
 
-  socket.on('signal:ice', ({ to, candidate }) => {
+  socket.on('signal:ice', ({ to, candidate }: { to: string; candidate: unknown }) => {
     io.to(to).emit('signal:ice', { from: socket.id, candidate });
   });
 
-  // ─── Disconnect ────────────────────────────────────────────────────
   socket.on('disconnect', () => {
-    const { role, roomId } = socket.data;
+    const { role, roomId } = socket.data as { role?: string; roomId?: string };
     if (!roomId || !rooms[roomId]) return;
 
     const room = rooms[roomId];
@@ -121,7 +119,6 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Clean up empty rooms
     if (!room.translator && room.listeners.size === 0) {
       delete rooms[roomId];
     }
