@@ -13,7 +13,6 @@ let listenerCount = 0;
 let connectedPeers = 0;
 let startTime: number | null = null;
 let timerInterval: number | null = null;
-let isLive = false;
 let isMuted = false;
 let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
@@ -132,7 +131,6 @@ async function goLive(): Promise<void> {
   }
 
   startViz(localStream);
-  isLive = true;
 
   socket = io(SERVER_URL);
 
@@ -182,7 +180,6 @@ async function goLive(): Promise<void> {
 }
 
 function stopBroadcast(): void {
-  isLive = false;
   localStream?.getTracks().forEach(t => t.stop());
   Object.values(peers).forEach(pc => pc.close());
   peers = {};
