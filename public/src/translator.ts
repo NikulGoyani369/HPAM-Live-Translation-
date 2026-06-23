@@ -21,20 +21,25 @@ fetch('/api/ice-servers')
   .then(d => { iceServers = d.iceServers; })
   .catch(() => {});
 
-const goLiveBtn       = document.getElementById('goLiveBtn') as HTMLButtonElement;
-const muteBtn         = document.getElementById('muteBtn') as HTMLButtonElement;
-const stopBtn         = document.getElementById('stopBtn') as HTMLButtonElement;
-const micSelect       = document.getElementById('micSelect') as HTMLSelectElement;
-const micField        = document.getElementById('micField') as HTMLElement;
-const dot             = document.getElementById('dot') as HTMLElement;
-const statusMsg       = document.getElementById('statusMsg') as HTMLElement;
+const pinScreen      = document.getElementById('pinScreen') as HTMLElement;
+const dashboard      = document.getElementById('dashboard') as HTMLElement;
+const pinInput       = document.getElementById('pinInput') as HTMLInputElement;
+const unlockBtn      = document.getElementById('unlockBtn') as HTMLButtonElement;
+const pinError       = document.getElementById('pinError') as HTMLElement;
+const goLiveBtn      = document.getElementById('goLiveBtn') as HTMLButtonElement;
+const muteBtn        = document.getElementById('muteBtn') as HTMLButtonElement;
+const stopBtn        = document.getElementById('stopBtn') as HTMLButtonElement;
+const micSelect      = document.getElementById('micSelect') as HTMLSelectElement;
+const micField       = document.getElementById('micField') as HTMLElement;
+const dot            = document.getElementById('dot') as HTMLElement;
+const statusMsg      = document.getElementById('statusMsg') as HTMLElement;
 const listenerCountEl = document.getElementById('listenerCount') as HTMLElement;
-const durationEl      = document.getElementById('durationEl') as HTMLElement;
-const peersEl         = document.getElementById('peersEl') as HTMLElement;
-const shareBox        = document.getElementById('shareBox') as HTMLElement;
-const shareUrl        = document.getElementById('shareUrl') as HTMLElement;
-const copyBtn         = document.getElementById('copyBtn') as HTMLButtonElement;
-const bars            = document.querySelectorAll('.bar') as NodeListOf<HTMLElement>;
+const durationEl     = document.getElementById('durationEl') as HTMLElement;
+const peersEl        = document.getElementById('peersEl') as HTMLElement;
+const shareBox       = document.getElementById('shareBox') as HTMLElement;
+const shareUrl       = document.getElementById('shareUrl') as HTMLElement;
+const copyBtn        = document.getElementById('copyBtn') as HTMLButtonElement;
+const bars           = document.querySelectorAll('.bar') as NodeListOf<HTMLElement>;
 
 async function loadMics(): Promise<void> {
   try {
@@ -135,7 +140,7 @@ async function goLive(): Promise<void> {
   socket = io(SERVER_URL);
 
   socket.on('connect', () => {
-    socket!.emit('translator:join', { roomId: ROOM_ID });
+    socket!.emit('translator:join', { roomId: ROOM_ID, pin: pinInput.value.trim() });
   });
 
   socket.on('translator:joined', ({ listenerCount: lc }: { listenerCount: number }) => {
@@ -220,3 +225,39 @@ copyBtn.addEventListener('click', () => {
     setTimeout(() => { copyBtn.textContent = 'Copy Link'; }, 2000);
   });
 });
+
+async function verifyPin(): Promise<void> {
+  const pin = pinInput.value.trim();
+  if (!pin) return;
+
+  unlockBtn.disabled = true;
+  pinError.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await res.json() as { ok: boolean; reason?: string };
+
+    if (data.ok) {
+      pinScreen.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+    } else if (data.reason === 'not_configured') {
+      pinError.textContent = 'Translator access is not set up — contact the admin';
+      pinError.classList.remove('hidden');
+    } else {
+      pinError.textContent = 'Incorrect PIN';
+      pinError.classList.remove('hidden');
+    }
+  } catch {
+    pinError.textContent = 'Could not reach server — check your connection';
+    pinError.classList.remove('hidden');
+  }
+
+  unlockBtn.disabled = false;
+}
+
+unlockBtn.addEventListener('click', verifyPin);
+pinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') verifyPin(); });
