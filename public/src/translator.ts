@@ -56,7 +56,8 @@ async function loadMics(): Promise<void> {
 function startTimer(): void {
   startTime = Date.now();
   timerInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - (startTime as number)) / 1000);
+    const t = startTime!;
+    const s = Math.floor((Date.now() - t) / 1000);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     durationEl.textContent = `${m}:${(s % 60).toString().padStart(2, '0')}`;
   }, 1000);
@@ -98,12 +99,14 @@ function stopViz(): void {
 }
 
 function createPeerForListener(listenerId: string): RTCPeerConnection {
+  const stream = localStream!;
+  const sock = socket!;
   const pc = new RTCPeerConnection({ iceServers });
 
-  localStream!.getTracks().forEach(t => pc.addTrack(t, localStream!));
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
   pc.onicecandidate = ({ candidate }) => {
-    if (candidate) socket!.emit('signal:ice', { to: listenerId, candidate });
+    if (candidate) sock.emit('signal:ice', { to: listenerId, candidate });
   };
 
   pc.onconnectionstatechange = () => {
@@ -158,14 +161,14 @@ async function goLive(): Promise<void> {
 
   socket.on('listener:count', ({ count }: { count: number }) => {
     listenerCount = count;
-    listenerCountEl.textContent = String(count);
+    listenerCountEl.textContent = String(listenerCount);
   });
 
   socket.on('listener:new', async ({ listenerId }: { listenerId: string }) => {
     const pc = createPeerForListener(listenerId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket!.emit('signal:offer', { to: listenerId, offer });
+    socket?.emit('signal:offer', { to: listenerId, offer });
   });
 
   socket.on('signal:answer', async ({ from, answer }: { from: string; answer: RTCSessionDescriptionInit }) => {
@@ -210,8 +213,9 @@ goLiveBtn.addEventListener('click', goLive);
 stopBtn.addEventListener('click', stopBroadcast);
 
 muteBtn.addEventListener('click', () => {
+  if (!localStream) return;
   isMuted = !isMuted;
-  localStream!.getTracks().forEach(t => { t.enabled = !isMuted; });
+  localStream.getTracks().forEach(t => { t.enabled = !isMuted; });
   muteBtn.textContent = isMuted ? '🎙 Unmute' : '🔇 Mute';
   muteBtn.classList.toggle('muted', isMuted);
   statusMsg.textContent = isMuted ? 'Muted — listeners cannot hear you' : 'You are live';

@@ -47,7 +47,8 @@ function setStatus(text: string, state = ''): void {
 function startTimer(): void {
   startTime = Date.now();
   timerInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - (startTime as number)) / 1000);
+    const t = startTime!;
+    const s = Math.floor((Date.now() - t) / 1000);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     const sec = (s % 60).toString().padStart(2, '0');
     durationEl.textContent = `${m}:${sec}`;
@@ -103,7 +104,7 @@ function createPeerConn(): RTCPeerConnection {
   const pc = new RTCPeerConnection({ iceServers });
 
   pc.onicecandidate = ({ candidate }) => {
-    if (candidate && translatorId) socket!.emit('signal:ice', { to: translatorId, candidate });
+    if (candidate && translatorId) socket?.emit('signal:ice', { to: translatorId, candidate });
   };
 
   pc.ontrack = (e) => {
@@ -175,7 +176,7 @@ function connect(): void {
     await peerConn.setRemoteDescription(offer);
     const answer = await peerConn.createAnswer();
     await peerConn.setLocalDescription(answer);
-    socket!.emit('signal:answer', { to: from, answer });
+    socket?.emit('signal:answer', { to: from, answer });
   });
 
   socket.on('signal:ice', ({ candidate }: { candidate: RTCIceCandidateInit }) => {
