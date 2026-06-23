@@ -1,68 +1,76 @@
-// ── Config ──────────────────────────────────────────────────────
+import { io, Socket } from 'socket.io-client';
+
 const ROOM_ID = 'hpam-english';
 const SERVER_URL = window.location.origin;
 
-// ── State ───────────────────────────────────────────────────────
-let socket, peerConn, audioCtx, analyser, animFrame, audioEl;
-let startTime = null, timerInterval = null;
+let socket: Socket | null = null;
+let peerConn: RTCPeerConnection | null = null;
+let audioCtx: AudioContext | null = null;
+let analyser: AnalyserNode | null = null;
+let animFrame = 0;
+let audioEl: HTMLAudioElement | null = null;
+let startTime: number | null = null;
+let timerInterval: number | null = null;
 let connected = false;
-let translatorId = null;
-let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+let translatorId: string | null = null;
+let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-fetch('/api/ice-servers').then(r => r.json()).then(d => { iceServers = d.iceServers; }).catch(() => {});
+fetch('/api/ice-servers')
+  .then(r => r.json() as Promise<{ iceServers: RTCIceServer[] }>)
+  .then(d => { iceServers = d.iceServers; })
+  .catch(() => {});
 
-// ── DOM ─────────────────────────────────────────────────────────
-const connectBtn   = document.getElementById('connectBtn');
-const stopBtn      = document.getElementById('stopBtn');
-const dot          = document.getElementById('dot');
-const statusMsg    = document.getElementById('statusMsg');
-const durationEl   = document.getElementById('duration');
-const waitingMsg   = document.getElementById('waitingMsg');
-const canvas       = document.getElementById('viz');
-const ctx2d        = canvas.getContext('2d');
-const volumeWrap   = document.getElementById('volumeWrap');
-const volumeSlider = document.getElementById('volumeSlider');
-const volumePct    = document.getElementById('volumePct');
+const connectBtn   = document.getElementById('connectBtn') as HTMLButtonElement;
+const stopBtn      = document.getElementById('stopBtn') as HTMLButtonElement;
+const dot          = document.getElementById('dot') as HTMLElement;
+const statusMsg    = document.getElementById('statusMsg') as HTMLElement;
+const durationEl   = document.getElementById('duration') as HTMLElement;
+const waitingMsg   = document.getElementById('waitingMsg') as HTMLElement;
+const canvas       = document.getElementById('viz') as HTMLCanvasElement;
+const ctx2d        = canvas.getContext('2d') as CanvasRenderingContext2D;
+const volumeWrap   = document.getElementById('volumeWrap') as HTMLElement;
+const volumeSlider = document.getElementById('volumeSlider') as HTMLInputElement;
+const volumePct    = document.getElementById('volumePct') as HTMLElement;
 
 volumeSlider.addEventListener('input', () => {
-  if (audioEl) audioEl.volume = volumeSlider.value;
-  volumePct.textContent = Math.round(volumeSlider.value * 100) + '%';
-  const pct = volumeSlider.value * 100;
+  if (audioEl) audioEl.volume = Number(volumeSlider.value);
+  volumePct.textContent = Math.round(Number(volumeSlider.value) * 100) + '%';
+  const pct = Number(volumeSlider.value) * 100;
   volumeSlider.style.background = `linear-gradient(to right, var(--gold) ${pct}%, rgba(255,255,255,0.1) ${pct}%)`;
 });
 
-// ── UI helpers ──────────────────────────────────────────────────
-function setStatus(text, state = '') {
+function setStatus(text: string, state = ''): void {
   statusMsg.textContent = text;
   dot.className = 'status-dot' + (state ? ' ' + state : '');
 }
 
-function startTimer() {
+function startTimer(): void {
   startTime = Date.now();
   timerInterval = setInterval(() => {
-    const s = Math.floor((Date.now() - startTime) / 1000);
+    const s = Math.floor((Date.now() - (startTime as number)) / 1000);
     const m = Math.floor(s / 60).toString().padStart(2, '0');
     const sec = (s % 60).toString().padStart(2, '0');
     durationEl.textContent = `${m}:${sec}`;
   }, 1000);
 }
 
-function stopTimer() {
-  clearInterval(timerInterval);
+function stopTimer(): void {
+  if (timerInterval !== null) clearInterval(timerInterval);
+  timerInterval = null;
   durationEl.textContent = '00:00';
 }
 
-// ── Visualizer ──────────────────────────────────────────────────
-function startVisualizer(stream) {
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function startVisualizer(stream: MediaStream): void {
+  audioCtx = new AudioContext();
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 64;
   audioCtx.createMediaStreamSource(stream).connect(analyser);
   drawViz();
 }
 
-function drawViz() {
+function drawViz(): void {
   animFrame = requestAnimationFrame(drawViz);
+  if (!analyser) return;
   const data = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(data);
   const avg = data.reduce((a, b) => a + b, 0) / data.length;
@@ -83,25 +91,26 @@ function drawViz() {
   ctx2d.stroke();
 }
 
-function stopVisualizer() {
+function stopVisualizer(): void {
   cancelAnimationFrame(animFrame);
-  if (audioCtx) audioCtx.close();
+  audioCtx?.close();
+  audioCtx = null;
+  analyser = null;
   ctx2d.clearRect(0, 0, 120, 120);
 }
 
-// ── WebRTC ──────────────────────────────────────────────────────
-function createPeerConn() {
+function createPeerConn(): RTCPeerConnection {
   const pc = new RTCPeerConnection({ iceServers });
 
   pc.onicecandidate = ({ candidate }) => {
-    if (candidate && translatorId) socket.emit('signal:ice', { to: translatorId, candidate });
+    if (candidate && translatorId) socket!.emit('signal:ice', { to: translatorId, candidate });
   };
 
   pc.ontrack = (e) => {
     connected = true;
     audioEl = new Audio();
     audioEl.srcObject = e.streams[0];
-    audioEl.volume = volumeSlider.value;
+    audioEl.volume = Number(volumeSlider.value);
     audioEl.play().catch(() => {});
     startVisualizer(e.streams[0]);
     setStatus('Live — English translation', 'live');
@@ -125,18 +134,17 @@ function createPeerConn() {
   return pc;
 }
 
-// ── Connect ──────────────────────────────────────────────────────
-function connect() {
+function connect(): void {
   connectBtn.disabled = true;
   setStatus('Connecting…');
 
   socket = io(SERVER_URL);
 
   socket.on('connect', () => {
-    socket.emit('listener:join', { roomId: ROOM_ID });
+    socket!.emit('listener:join', { roomId: ROOM_ID });
   });
 
-  socket.on('listener:joined', ({ translatorOnline }) => {
+  socket.on('listener:joined', ({ translatorOnline }: { translatorOnline: boolean }) => {
     peerConn = createPeerConn();
     if (!translatorOnline) {
       setStatus('Waiting for translator…');
@@ -161,20 +169,20 @@ function connect() {
     waitingMsg.classList.remove('hidden');
   });
 
-  socket.on('signal:offer', async ({ from, offer }) => {
+  socket.on('signal:offer', async ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) => {
     translatorId = from;
     if (!peerConn) peerConn = createPeerConn();
     await peerConn.setRemoteDescription(offer);
     const answer = await peerConn.createAnswer();
     await peerConn.setLocalDescription(answer);
-    socket.emit('signal:answer', { to: from, answer });
+    socket!.emit('signal:answer', { to: from, answer });
   });
 
-  socket.on('signal:ice', ({ candidate }) => {
+  socket.on('signal:ice', ({ candidate }: { candidate: RTCIceCandidateInit }) => {
     peerConn?.addIceCandidate(candidate).catch(() => {});
   });
 
-  socket.on('error', ({ message }) => {
+  socket.on('error', ({ message }: { message: string }) => {
     setStatus('Error: ' + message, 'error');
     connectBtn.disabled = false;
   });
@@ -184,7 +192,7 @@ function connect() {
   });
 }
 
-function cleanup() {
+function cleanup(): void {
   peerConn?.close();
   peerConn = null;
   socket?.disconnect();
@@ -198,7 +206,6 @@ function cleanup() {
   connectBtn.disabled = false;
 }
 
-// ── Buttons ──────────────────────────────────────────────────────
 connectBtn.addEventListener('click', connect);
 stopBtn.addEventListener('click', () => {
   cleanup();
