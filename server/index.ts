@@ -82,9 +82,6 @@ io.on('connection', (socket) => {
 
     if (room.translator) {
       io.to(room.translator).emit('listener:count', { count: room.listeners.size });
-    }
-
-    if (room.translator) {
       io.to(room.translator).emit('listener:new', { listenerId: socket.id });
     }
   });
