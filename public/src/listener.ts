@@ -97,18 +97,16 @@ function stopVisualizer(): void {
 }
 
 function flushQueue(): void {
-  if (!sourceBuffer || sourceBuffer.updating || chunkQueue.length === 0) return;
-  sourceBuffer.appendBuffer(chunkQueue.shift()!);
+  if (!sourceBuffer || sourceBuffer.updating) return;
   if (
     sourceBuffer.buffered.length > 0 &&
-    !sourceBuffer.updating &&
     sourceBuffer.buffered.end(0) - sourceBuffer.buffered.start(0) > 30
   ) {
-    sourceBuffer.remove(
-      sourceBuffer.buffered.start(0),
-      sourceBuffer.buffered.end(0) - 10
-    );
+    sourceBuffer.remove(sourceBuffer.buffered.start(0), sourceBuffer.buffered.end(0) - 10);
+    return;
   }
+  if (chunkQueue.length === 0) return;
+  sourceBuffer.appendBuffer(chunkQueue.shift()!);
 }
 
 function setupAudio(): void {
