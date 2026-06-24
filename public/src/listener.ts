@@ -137,8 +137,11 @@ function stopAudio(): void {
   chunkQueue.length = 0;
   if (mediaSource && mediaSource.readyState === 'open') mediaSource.endOfStream();
   mediaSource = null;
-  audioEl?.pause();
-  audioEl = null;
+  if (audioEl) {
+    URL.revokeObjectURL(audioEl.src);
+    audioEl.pause();
+    audioEl = null;
+  }
   stopVisualizer();
   stopTimer();
   volumeWrap.classList.add('hidden');

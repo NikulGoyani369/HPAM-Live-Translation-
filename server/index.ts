@@ -111,8 +111,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('audio:chunk', (chunk: ArrayBuffer) => {
-    const { roomId } = socket.data as { roomId?: string };
-    if (!roomId) return;
+    const { role, roomId } = socket.data as { role?: string; roomId?: string };
+    if (role !== 'translator' || !roomId) return;
     socket.to(roomId).emit('audio:chunk', chunk);
   });
 
