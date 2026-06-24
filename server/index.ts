@@ -9,12 +9,6 @@ interface Room {
   listeners: Set<string>;
 }
 
-interface IceServer {
-  urls: string | string[];
-  username?: string;
-  credential?: string;
-}
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -25,15 +19,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use(express.json());
 
 const rooms: Record<string, Room> = {};
-
-app.get('/api/ice-servers', (_req, res) => {
-  const iceServers: IceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
-  if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
-    const urls = process.env.TURN_URLS.split(',').map(u => u.trim());
-    iceServers.push({ urls, username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
-  }
-  res.json({ iceServers });
-});
 
 app.get('/api/status/:roomId', (req, res) => {
   const room = rooms[req.params.roomId];
@@ -123,23 +108,12 @@ io.on('connection', (socket) => {
     console.log(`[L] Listener joined room: ${roomId} (translator online: ${translatorOnline})`);
 
     socket.emit('listener:joined', { roomId, translatorOnline });
-
-    if (room.translator) {
-      io.to(room.translator).emit('listener:count', { count: room.listeners.size });
-      io.to(room.translator).emit('listener:new', { listenerId: socket.id });
-    }
   });
 
-  socket.on('signal:offer', ({ to, offer }: { to: string; offer: unknown }) => {
-    io.to(to).emit('signal:offer', { from: socket.id, offer });
-  });
-
-  socket.on('signal:answer', ({ to, answer }: { to: string; answer: unknown }) => {
-    io.to(to).emit('signal:answer', { from: socket.id, answer });
-  });
-
-  socket.on('signal:ice', ({ to, candidate }: { to: string; candidate: unknown }) => {
-    io.to(to).emit('signal:ice', { from: socket.id, candidate });
+  socket.on('audio:chunk', (chunk: ArrayBuffer) => {
+    const { roomId } = socket.data as { roomId?: string };
+    if (!roomId) return;
+    socket.to(roomId).emit('audio:chunk', chunk);
   });
 
   socket.on('disconnect', () => {
