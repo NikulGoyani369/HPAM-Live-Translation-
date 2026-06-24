@@ -1,9 +1,14 @@
-const badge = document.getElementById('liveBadge');
-const liveText = document.getElementById('liveText');
+interface StatusResponse {
+  live: boolean;
+  listeners: number;
+}
 
-function checkStatus() {
+const badge = document.getElementById('liveBadge') as HTMLElement;
+const liveText = document.getElementById('liveText') as HTMLElement;
+
+function checkStatus(): void {
   fetch('/api/status/hpam-english')
-    .then(r => r.json())
+    .then(r => r.json() as Promise<StatusResponse>)
     .then(({ live, listeners }) => {
       if (live) {
         badge.classList.add('live');

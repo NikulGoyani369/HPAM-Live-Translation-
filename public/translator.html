@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1a0a2e" />
   <link rel="manifest" href="/manifest.json"/>
-  <link rel="apple-touch-icon" href="/icon.svg"/>
+  <link rel="icon" type="image/png" href="https://hpam.hariprabodham.de/images/Final%20Logo.png"/>
+  <link rel="apple-touch-icon" href="https://hpam.hariprabodham.de/images/Final%20Logo.png"/>
   <title>HPAM Translator Dashboard</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -94,7 +95,7 @@
     /* Stats row */
     .stats {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
       margin-bottom: 24px;
     }
@@ -223,17 +224,51 @@
       color: rgba(255,255,255,0.2);
       text-align: center;
     }
+
+    .pin-title { font-size: 14px; color: var(--muted); text-align: center; margin-bottom: 20px; }
+    .pin-input {
+      width: 100%;
+      padding: 14px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      color: var(--cream);
+      font-size: 22px;
+      letter-spacing: 6px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .pin-input:focus { outline: none; border-color: var(--gold); }
+    .pin-error { color: var(--red); font-size: 13px; text-align: center; margin-top: 12px; }
   </style>
 </head>
 <body>
 
   <div class="header">
+    <img src="https://hpam.hariprabodham.de/images/Final%20Logo.png" alt="HPAM Logo" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;" />
     <div class="badge">Translator Dashboard</div>
-    <h1>Hari Prabodham<br>Amrut Mahotsav 2026</h1>
+    <h1>HariPrabodham<br>Amrut Mahotsav 2026</h1>
     <div class="sub">Gujarati → English · Berlin, Germany</div>
   </div>
 
-  <div class="card">
+  <!-- PIN Screen (shown on load) -->
+  <div id="pinScreen" class="card">
+    <p class="pin-title">Enter translator PIN to continue</p>
+    <input
+      type="password"
+      id="pinInput"
+      class="pin-input"
+      placeholder="••••"
+      inputmode="numeric"
+      maxlength="20"
+      autocomplete="off"
+    />
+    <button class="btn btn-primary" id="unlockBtn">🔓 Unlock</button>
+    <div id="pinError" class="pin-error hidden"></div>
+  </div>
+
+  <!-- Dashboard (hidden until PIN verified) -->
+  <div id="dashboard" class="card hidden">
     <!-- Mic visualizer bars -->
     <div class="viz-wrap" id="vizWrap">
       <div class="bar" style="height:8px"></div>
@@ -258,10 +293,6 @@
       <div class="stat">
         <div class="stat-value" id="durationEl">00:00</div>
         <div class="stat-label">Duration</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value" id="peersEl">0</div>
-        <div class="stat-label">Connected</div>
       </div>
     </div>
 
@@ -290,9 +321,8 @@
     </div>
   </div>
 
-  <div class="footer">HPAM 2026 · WebRTC Real-time · hariprabodham.de</div>
+  <div class="footer">HPAM 2026 · hariprabodham.de</div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="/src/translator.js"></script>
+  <script src="/dist/translator.js"></script>
 </body>
 </html>

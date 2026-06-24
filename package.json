@@ -1,11 +1,13 @@
 {
   "name": "hpam-translation-server",
   "version": "1.0.0",
-  "description": "Live WebRTC translation server for Hari Prabodham Amrut Mahotsav 2026",
-  "main": "server/index.js",
+  "description": "Live translation server for HariPrabodham Amrut Mahotsav 2026",
+  "main": "dist/server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "nodemon server/index.js"
+    "build": "tsc -p server/tsconfig.json && esbuild public/src/index.ts public/src/translator.ts public/src/listener.ts --bundle --outdir=public/dist --minify",
+    "dev": "concurrently \"nodemon --exec ts-node server/index.ts\" \"esbuild public/src/index.ts public/src/translator.ts public/src/listener.ts --bundle --outdir=public/dist --watch\"",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc --noEmit && tsc -p server/tsconfig.json --noEmit"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -13,6 +15,13 @@
     "socket.io": "^4.7.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.0.0",
+    "concurrently": "^10.0.3",
+    "esbuild": "^0.28.1",
+    "nodemon": "^3.0.1",
+    "socket.io-client": "^4.8.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
   }
 }

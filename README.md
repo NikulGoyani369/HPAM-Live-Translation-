@@ -1,5 +1,5 @@
 # HPAM Live Translation App
-**Hari Prabodham Amrut Mahotsav 2026 · Berlin, Germany**
+**HariPrabodham Amrut Mahotsav 2026 · Berlin, Germany**
 Real-time Gujarati → English WebRTC translation for event attendees.
 
 ---
