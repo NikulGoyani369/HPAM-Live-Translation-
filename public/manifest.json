@@ -1,7 +1,7 @@
 {
   "name": "HPAM Live Translation",
   "short_name": "HPAM",
-  "description": "Live Gujarati → English translation for Hari Prabodham Amrut Mahotsav 2026",
+  "description": "Live Gujarati → English translation for HariPrabodham Amrut Mahotsav 2026",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1a0a2e",
