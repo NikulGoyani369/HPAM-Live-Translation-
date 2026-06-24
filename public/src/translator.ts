@@ -5,41 +5,33 @@ const SERVER_URL = window.location.origin;
 
 let socket: Socket | null = null;
 let localStream: MediaStream | null = null;
+let mediaRecorder: MediaRecorder | null = null;
 let audioCtx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let animFrame = 0;
-let peers: Record<string, RTCPeerConnection> = {};
 let listenerCount = 0;
-let connectedPeers = 0;
 let startTime: number | null = null;
 let timerInterval: number | null = null;
 let isMuted = false;
-let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-fetch('/api/ice-servers')
-  .then(r => r.json() as Promise<{ iceServers: RTCIceServer[] }>)
-  .then(d => { iceServers = d.iceServers; })
-  .catch(() => {});
-
-const pinScreen      = document.getElementById('pinScreen') as HTMLElement;
-const dashboard      = document.getElementById('dashboard') as HTMLElement;
-const pinInput       = document.getElementById('pinInput') as HTMLInputElement;
-const unlockBtn      = document.getElementById('unlockBtn') as HTMLButtonElement;
-const pinError       = document.getElementById('pinError') as HTMLElement;
-const goLiveBtn      = document.getElementById('goLiveBtn') as HTMLButtonElement;
-const muteBtn        = document.getElementById('muteBtn') as HTMLButtonElement;
-const stopBtn        = document.getElementById('stopBtn') as HTMLButtonElement;
-const micSelect      = document.getElementById('micSelect') as HTMLSelectElement;
-const micField       = document.getElementById('micField') as HTMLElement;
-const dot            = document.getElementById('dot') as HTMLElement;
-const statusMsg      = document.getElementById('statusMsg') as HTMLElement;
+const pinScreen       = document.getElementById('pinScreen') as HTMLElement;
+const dashboard       = document.getElementById('dashboard') as HTMLElement;
+const pinInput        = document.getElementById('pinInput') as HTMLInputElement;
+const unlockBtn       = document.getElementById('unlockBtn') as HTMLButtonElement;
+const pinError        = document.getElementById('pinError') as HTMLElement;
+const goLiveBtn       = document.getElementById('goLiveBtn') as HTMLButtonElement;
+const muteBtn         = document.getElementById('muteBtn') as HTMLButtonElement;
+const stopBtn         = document.getElementById('stopBtn') as HTMLButtonElement;
+const micSelect       = document.getElementById('micSelect') as HTMLSelectElement;
+const micField        = document.getElementById('micField') as HTMLElement;
+const dot             = document.getElementById('dot') as HTMLElement;
+const statusMsg       = document.getElementById('statusMsg') as HTMLElement;
 const listenerCountEl = document.getElementById('listenerCount') as HTMLElement;
-const durationEl     = document.getElementById('durationEl') as HTMLElement;
-const peersEl        = document.getElementById('peersEl') as HTMLElement;
-const shareBox       = document.getElementById('shareBox') as HTMLElement;
-const shareUrl       = document.getElementById('shareUrl') as HTMLElement;
-const copyBtn        = document.getElementById('copyBtn') as HTMLButtonElement;
-const bars           = document.querySelectorAll('.bar') as NodeListOf<HTMLElement>;
+const durationEl      = document.getElementById('durationEl') as HTMLElement;
+const shareBox        = document.getElementById('shareBox') as HTMLElement;
+const shareUrl        = document.getElementById('shareUrl') as HTMLElement;
+const copyBtn         = document.getElementById('copyBtn') as HTMLButtonElement;
+const bars            = document.querySelectorAll('.bar') as NodeListOf<HTMLElement>;
 
 async function loadMics(): Promise<void> {
   try {
@@ -53,6 +45,7 @@ async function loadMics(): Promise<void> {
     micSelect.innerHTML = '<option value="">Default microphone</option>';
   }
 }
+
 function startTimer(): void {
   startTime = Date.now();
   timerInterval = setInterval(() => {
@@ -98,30 +91,6 @@ function stopViz(): void {
   bars.forEach(b => { b.style.height = '4px'; b.classList.remove('active'); });
 }
 
-function createPeerForListener(listenerId: string): RTCPeerConnection {
-  const stream = localStream!;
-  const sock = socket!;
-  const pc = new RTCPeerConnection({ iceServers });
-
-  stream.getTracks().forEach(t => pc.addTrack(t, stream));
-
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate) sock.emit('signal:ice', { to: listenerId, candidate });
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (['connected', 'completed'].includes(pc.connectionState)) {
-      connectedPeers++;
-    } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-      connectedPeers = Math.max(0, connectedPeers - 1);
-    }
-    peersEl.textContent = String(connectedPeers);
-  };
-
-  peers[listenerId] = pc;
-  return pc;
-}
-
 async function goLive(): Promise<void> {
   goLiveBtn.disabled = true;
 
@@ -137,7 +106,6 @@ async function goLive(): Promise<void> {
   }
 
   startViz(localStream);
-
   socket = io(SERVER_URL);
 
   socket.on('connect', () => {
@@ -157,26 +125,21 @@ async function goLive(): Promise<void> {
     const url = `${window.location.origin}/listener.html`;
     shareUrl.textContent = url;
     shareBox.classList.remove('hidden');
+
+    const stream = localStream!;
+    mediaRecorder = new MediaRecorder(stream, {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: 32000,
+    });
+    mediaRecorder.addEventListener('dataavailable', (e) => {
+      if (e.data.size > 0) socket?.emit('audio:chunk', e.data);
+    });
+    mediaRecorder.start(250);
   });
 
   socket.on('listener:count', ({ count }: { count: number }) => {
     listenerCount = count;
     listenerCountEl.textContent = String(listenerCount);
-  });
-
-  socket.on('listener:new', async ({ listenerId }: { listenerId: string }) => {
-    const pc = createPeerForListener(listenerId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket?.emit('signal:offer', { to: listenerId, offer });
-  });
-
-  socket.on('signal:answer', async ({ from, answer }: { from: string; answer: RTCSessionDescriptionInit }) => {
-    await peers[from]?.setRemoteDescription(answer);
-  });
-
-  socket.on('signal:ice', ({ from, candidate }: { from: string; candidate: RTCIceCandidateInit }) => {
-    peers[from]?.addIceCandidate(candidate).catch(() => {});
   });
 
   socket.on('error', ({ message }: { message: string }) => {
@@ -186,16 +149,14 @@ async function goLive(): Promise<void> {
 }
 
 function stopBroadcast(): void {
+  mediaRecorder?.stop();
+  mediaRecorder = null;
   localStream?.getTracks().forEach(t => t.stop());
-  Object.values(peers).forEach(pc => pc.close());
-  peers = {};
   socket?.disconnect();
   stopViz();
   stopTimer();
-  connectedPeers = 0;
   listenerCount = 0;
   listenerCountEl.textContent = '0';
-  peersEl.textContent = '0';
   dot.className = 'dot';
   statusMsg.textContent = 'Broadcast ended';
   isMuted = false;
