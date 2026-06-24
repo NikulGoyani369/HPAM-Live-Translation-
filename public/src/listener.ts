@@ -4,21 +4,15 @@ const ROOM_ID = 'hpam-english';
 const SERVER_URL = window.location.origin;
 
 let socket: Socket | null = null;
-let peerConn: RTCPeerConnection | null = null;
+let audioEl: HTMLAudioElement | null = null;
+let mediaSource: MediaSource | null = null;
+let sourceBuffer: SourceBuffer | null = null;
+const chunkQueue: ArrayBuffer[] = [];
 let audioCtx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let animFrame = 0;
-let audioEl: HTMLAudioElement | null = null;
 let startTime: number | null = null;
 let timerInterval: number | null = null;
-let connected = false;
-let translatorId: string | null = null;
-let iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
-
-fetch('/api/ice-servers')
-  .then(r => r.json() as Promise<{ iceServers: RTCIceServer[] }>)
-  .then(d => { iceServers = d.iceServers; })
-  .catch(() => {});
 
 const connectBtn   = document.getElementById('connectBtn') as HTMLButtonElement;
 const stopBtn      = document.getElementById('stopBtn') as HTMLButtonElement;
@@ -61,11 +55,13 @@ function stopTimer(): void {
   durationEl.textContent = '00:00';
 }
 
-function startVisualizer(stream: MediaStream): void {
+function startVisualizer(el: HTMLAudioElement): void {
   audioCtx = new AudioContext();
   analyser = audioCtx.createAnalyser();
   analyser.fftSize = 64;
-  audioCtx.createMediaStreamSource(stream).connect(analyser);
+  const source = audioCtx.createMediaElementSource(el);
+  source.connect(analyser);
+  source.connect(audioCtx.destination);
   drawViz();
 }
 
@@ -100,39 +96,61 @@ function stopVisualizer(): void {
   ctx2d.clearRect(0, 0, 120, 120);
 }
 
-function createPeerConn(): RTCPeerConnection {
-  const pc = new RTCPeerConnection({ iceServers });
+function flushQueue(): void {
+  if (!sourceBuffer || sourceBuffer.updating || chunkQueue.length === 0) return;
+  sourceBuffer.appendBuffer(chunkQueue.shift()!);
+  if (
+    sourceBuffer.buffered.length > 0 &&
+    !sourceBuffer.updating &&
+    sourceBuffer.buffered.end(0) - sourceBuffer.buffered.start(0) > 30
+  ) {
+    sourceBuffer.remove(
+      sourceBuffer.buffered.start(0),
+      sourceBuffer.buffered.end(0) - 10
+    );
+  }
+}
 
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate && translatorId) socket?.emit('signal:ice', { to: translatorId, candidate });
-  };
+function setupAudio(): void {
+  mediaSource = new MediaSource();
+  audioEl = new Audio();
+  audioEl.src = URL.createObjectURL(mediaSource);
+  audioEl.volume = Number(volumeSlider.value);
 
-  pc.ontrack = (e) => {
-    connected = true;
-    audioEl = new Audio();
-    audioEl.srcObject = e.streams[0];
-    audioEl.volume = Number(volumeSlider.value);
-    audioEl.play().catch(() => {});
-    startVisualizer(e.streams[0]);
+  mediaSource.addEventListener('sourceopen', () => {
+    const ms = mediaSource as MediaSource;
+    sourceBuffer = ms.addSourceBuffer('audio/webm;codecs=opus');
+    sourceBuffer.mode = 'sequence';
+    sourceBuffer.addEventListener('updateend', flushQueue);
+    const el = audioEl as HTMLAudioElement;
+    el.play().catch(() => {});
+    startVisualizer(el);
     setStatus('Live — English translation', 'live');
     startTimer();
     waitingMsg.classList.add('hidden');
     volumeWrap.classList.remove('hidden');
     stopBtn.classList.remove('hidden');
     connectBtn.classList.add('hidden');
-  };
+  });
+}
 
-  pc.onconnectionstatechange = () => {
-    if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-      setStatus('Connection lost — tap to retry');
-      cleanup();
-      connectBtn.classList.remove('hidden');
-      connectBtn.textContent = '🔄 Reconnect';
-      stopBtn.classList.add('hidden');
-    }
-  };
+function stopAudio(): void {
+  sourceBuffer = null;
+  chunkQueue.length = 0;
+  if (mediaSource && mediaSource.readyState === 'open') mediaSource.endOfStream();
+  mediaSource = null;
+  audioEl?.pause();
+  audioEl = null;
+  stopVisualizer();
+  stopTimer();
+  volumeWrap.classList.add('hidden');
+}
 
-  return pc;
+function cleanup(): void {
+  stopAudio();
+  socket?.disconnect();
+  socket = null;
+  connectBtn.disabled = false;
 }
 
 function connect(): void {
@@ -142,45 +160,36 @@ function connect(): void {
   socket = io(SERVER_URL);
 
   socket.on('connect', () => {
+    stopAudio();
     socket!.emit('listener:join', { roomId: ROOM_ID });
   });
 
   socket.on('listener:joined', ({ translatorOnline }: { translatorOnline: boolean }) => {
-    peerConn = createPeerConn();
-    if (!translatorOnline) {
+    if (translatorOnline) {
+      setStatus('Translator found — connecting…');
+      setupAudio();
+    } else {
       setStatus('Waiting for translator…');
       waitingMsg.classList.remove('hidden');
       connectBtn.disabled = false;
-    } else {
-      setStatus('Translator found — connecting…');
     }
   });
 
   socket.on('translator:online', () => {
     waitingMsg.classList.add('hidden');
     setStatus('Translator online — connecting…');
-    if (!peerConn) peerConn = createPeerConn();
+    setupAudio();
   });
 
   socket.on('translator:offline', () => {
     setStatus('Translator went offline');
-    stopVisualizer();
-    stopTimer();
-    connected = false;
+    stopAudio();
     waitingMsg.classList.remove('hidden');
   });
 
-  socket.on('signal:offer', async ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) => {
-    translatorId = from;
-    if (!peerConn) peerConn = createPeerConn();
-    await peerConn.setRemoteDescription(offer);
-    const answer = await peerConn.createAnswer();
-    await peerConn.setLocalDescription(answer);
-    socket?.emit('signal:answer', { to: from, answer });
-  });
-
-  socket.on('signal:ice', ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-    peerConn?.addIceCandidate(candidate).catch(() => {});
+  socket.on('audio:chunk', (chunk: ArrayBuffer) => {
+    chunkQueue.push(chunk);
+    flushQueue();
   });
 
   socket.on('error', ({ message }: { message: string }) => {
@@ -189,22 +198,8 @@ function connect(): void {
   });
 
   socket.on('disconnect', () => {
-    if (connected) setStatus('Disconnected', 'error');
+    setStatus('Disconnected', 'error');
   });
-}
-
-function cleanup(): void {
-  peerConn?.close();
-  peerConn = null;
-  socket?.disconnect();
-  socket = null;
-  translatorId = null;
-  audioEl = null;
-  stopVisualizer();
-  stopTimer();
-  connected = false;
-  volumeWrap.classList.add('hidden');
-  connectBtn.disabled = false;
 }
 
 connectBtn.addEventListener('click', connect);
